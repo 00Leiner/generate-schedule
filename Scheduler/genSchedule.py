@@ -1,5 +1,5 @@
 from tools.tobeSchedule import tobeSChedule
-from tools.formatting import formatting, print_schedule
+from tools.formatting import formatting, print_instructor_schedule, print_schedule
 
 class genSChedule:
     def __init__(self, program_curriculum, instructors, rooms, day_range,time_range) -> None:
@@ -8,6 +8,9 @@ class genSChedule:
         self.rooms = rooms #{course_type: [list of rooms]}
         self.day_range = day_range
         self.time_range =time_range # range(7,19)
+        self._program = set(program for program,_, _, _, _ in self.programCourseInfo)
+        self._instructor = set(instructor for _, instructor_list in self.instructors.items() for instructor in instructor_list)
+        self._room = set(room for _, room_list in self.rooms.items() for room in room_list)
         self.assignment = {}
         self.availability_initialization()
         self.solver()
@@ -15,29 +18,28 @@ class genSChedule:
      
      #initialization of availability   
     def availability_initialization(self):
-        self._program = set(program for program,_, _, _, _ in self.programCourseInfo)
-        self._instructor = set(instructor for _, instructor_list in self.instructors.items() for instructor in instructor_list)
-        self._room = set(room for _, room_list in self.rooms.items() for room in room_list)
         self.program_availability = {program: {day: {time: True for time in self.time_range} for day in self.day_range} for program in self._program}
         self.room_availability = {room: {day: {time: True for time in self.time_range} for day in self.day_range} for room in self._room}
         self.instructor_availability = {instructor: {day: {time: True for time in self.time_range} for day in self.day_range} for instructor in self._instructor}
-    
     #update
     def update_availability(self, assignment):
         self.availability_initialization() #for reset
+        
+        # self.instructor_schedule(assignment)
+        # self.print_room_schedule(assignment)
         
         for var, value in assignment.items():
             self.update_availability_for_assignment(var, value)
             
     def update_availability_for_assignment(self, var, value):
-        program,_, _, durationReq, _ = var
-        day, time_start, room, instructor = value
+        (program,_, _, durationReq, _) = var
+        (day, time_start, room, instructor) = value
         
         for time_slot in range(time_start, time_start + durationReq):
             self.program_availability[program][day][time_slot] = False
             self.room_availability[room][day][time_slot] = False
             self.instructor_availability[instructor][day][time_slot] = False
-    
+        
     def solver(self):
         self.assignment = {}  # Clear previous assignment
         
@@ -51,6 +53,8 @@ class genSChedule:
     
     #backtracking
     def backtrack(self):
+        self.update_availability(self.assignment)#update availability
+        
         if len(self.assignment) == len(self.programCourseInfo):  # All variables assigned for both schedules
             return self.assignment
         
@@ -59,23 +63,30 @@ class genSChedule:
         if var is None:
             return None  # No unassigned variables left
         
+        
         for value in self.domainValue(var): #(day, time_start, room, instructor)
 
             if self.is_consistent(var, value):
                 
+                print('-----------')
+                
                 self.assignment[var] = value
                 
-                self.update_availability(self.assignment)
-                # print(self.room_availability)
-                # print(self.program_availability)
-                # print(self.assignment)
-                result = self.backtrack() #recursion
-                
+                # self.forward_checking(var, value)  # Perform forward checking
+            
+                # # Prune domain based on the current assignment
+                # updated_domain = self.prune_domain(var, value)
+            
+                # Proceed only with consistent values
+                # for updated_value in updated_domain:
+                # self.assignment[var] = updated_value
+                result = self.backtrack()  # Recurse
                 if result is not None:
-                   return result  # Return result if it exists
+                    return result  # Return result if it exists
+               
+                print('...........')
                 
                 del self.assignment[var]  # Backtrack
-                self.update_availability(self.assignment)  # Backtrack availability
                 
         return None
     
@@ -102,25 +113,38 @@ class genSChedule:
                         check_alltime = True
                         
                         for ts in range(time_start, time_start + durationReq):
-                            if not self.program_availability[program][day][ts] and \
-                                not self.instructor_availability[instructor][day][ts] and \
+                            if not self.program_availability[program][day][ts] or \
+                                not self.instructor_availability[instructor][day][ts] or \
                                     not self.room_availability[room][day][ts]:
+                                # print('false')
                                 check_alltime = False
                                 break
                             
+                        # print(check_alltime)
                         if check_alltime:
                             ordered_values.append((day, time_start, room, instructor))
                             
         # print(ordered_values)        
         return ordered_values  # Return empty list if no valid schedule slot is found
     
+    # def forward_checking(self, var, value):
+    #     # Prune the domains of other variables based on the current assignment
+    #     for other_var in self.assignment.keys():
+    #         if other_var != var:
+    #             self.prune_domain(other_var, value)
+    
+    # def prune_domain(self, var, value):
+    #     # Prune the domain of the variable based on the current assignment
+    #     domain = self.domainValue(var)
+    #     updated_domain = [val for val in domain if self.is_consistent(var, val)]
+    #     return updated_domain
+    
     #constraints
     def is_consistent(self, var, value):
         
-        if self.check_overlap(var, value) and \
-            self.check_instructor_consecutive_hrs(var, value) and \
+        if self.check_instructor_consecutive_hrs(var, value) and \
                 self.check_program_consecutive_hrs(var, value) and\
-                    self.check_schedule2(var, value):
+                    self.check_schedule2(var, value) :
             # print('is consistent is true')
             return True
         return False
@@ -190,31 +214,4 @@ class genSChedule:
                 return False
             
         return True
-            
-    def check_overlap(self, var, value):
-        program,course_code, typeOfRoomReq, durationReq, schedNum = var
-        day, time_start, room, instructor = value
-
-        for assigned_var, assigned_value in self.assignment.items():
-            assigned_day, assigned_time_start, _, _ = assigned_value
-            
-            if assigned_var[0] == program:
-                assigned_duration = assigned_var[3]
-
-                if day == assigned_day:  # Check if it's the same day
-                    if (time_start >= assigned_time_start and time_start < assigned_time_start + assigned_duration) or \
-                        (assigned_time_start >= time_start and assigned_time_start < time_start + durationReq):
-                # If there's overlap in time, return False
-                        return False
-                    
-            # if  assigned_value[2] == room:
-            #     assigned_duration = assigned_var[3]
-
-            #     if day == assigned_day:  # Check if it's the same day
-            #         if (time_start >= assigned_time_start and time_start < assigned_time_start + assigned_duration) or \
-            #             (assigned_time_start >= time_start and assigned_time_start < time_start + durationReq):
-            #     # If there's overlap in time, return False
-            #             return False
-
-        return True         
     

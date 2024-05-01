@@ -1,0 +1,21 @@
+
+    # def define_instructor_schedule(self):
+    # # Organize schedule entries by instructor
+    #     for program, courses in self.assignment.items():
+    #         for course_code, schedules in courses.items():
+    #             for schedNum, schedule_info in schedules.items():
+    #                 _, _, room, instructor = schedule_info
+    #                 if instructor not in self.instructor_schedule:
+    #                     self.instructor_schedule[instructor] = []
+    #                 self.instructor_schedule[instructor].append((program, course_code, schedNum, schedule_info))
+
+    # def define_room_schedule(self):
+    #     # Organize schedule entries by room
+    #     for program, courses in self.assignment.items():
+    #         for course_code, schedules in courses.items():
+    #             for schedNum, schedule_info in schedules.items():
+    #                 _, _, room, _ = schedule_info
+    #                 if room not in self.room_schedule:
+    #                     self.room_schedule[room] = []
+    #                 self.room_schedule[room].append((program, course_code, schedNum, schedule_info))
+        
